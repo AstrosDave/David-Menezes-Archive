@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Mar  6 13:02:44 2018
+
+@author: yasi
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from astropy.convolution import convolve
+from astropy.convolution import Gaussian1DKernel
+from astropy.convolution import Box1DKernel
+from astropy.io import fits
+from scipy.optimize import curve_fit as curve_fit
+from matplotlib import rcParams
+from scipy.signal import argrelmin
+import glob
+import scipy
+from astropy.io import ascii
+
+from matplotlib.gridspec import GridSpec
+from matplotlib.ticker import AutoMinorLocator
+import matplotlib
+from uncertainties import ufloat
+from matplotlib import cm
+from matplotlib import colors
+from scipy import interpolate
+import sys
+
+"""
+#mpl.rcParams['text.usetex']=True
+#mpl.rcParams['text.latex.unicode']=True
+
+mpl.rcParams['xtick.labelsize'] = 35
+mpl.rcParams['ytick.labelsize'] = 35
+mpl.rc('font', family='serif', serif='cm10')
+mpl.rcParams['legend.fontsize'] = 30
+mpl.rcParams['axes.labelsize'] = 30
+plt.rcParams['axes.linewidth'] = 1.5
+plt.rcParams['xtick.major.size'] = 12
+plt.rcParams['xtick.minor.size'] = 6
+plt.rcParams['ytick.major.size'] = 12
+plt.rcParams['ytick.minor.size'] = 6
+plt.rcParams['ytick.minor.size'] = 6
+#plt.rcParams['xtick.minor.top'] = True
+#plt.rcParams['xtick.major.top'] = True
+"""
+
+##########################################
+#### Reading in the JAVELIN IDs #########
+##########################################
+"""
+version = 't200_w0.5_ordered'
+
+jav_datapath = '/Users/yasi/Research/JAVELIN/Analysis/lag_error_analysis_area/version_'+ version +'.dat'
+jav_names = ['ID', 'Lag','loerr', 'uperr', 'rmax','ChiSq', 'lag_S/N', 'fpeak', 'sn_flag']
+jav_data = np.genfromtxt(jav_datapath, dtype = float, names = ['ID', 'Lag','loerr', 'uperr', 'rmax','ChiSq', 'lag_S/N', 'fpeak', 'sn_flag'], skip_header = 2)
+
+ID = jav_data['ID']
+tau = jav_data['Lag']
+rmax = jav_data['rmax']
+chisq = jav_data['ChiSq']
+fpeak = jav_data['fpeak']
+
+sn_flag = jav_data['sn_flag']
+cond_rmax = (rmax > 0.4)
+cond_f = (fpeak > 0.5) 
+cond_sn1 = ((sn_flag == 1) & (rmax > 0.4)) & (fpeak > 0.5)
+cond_sn2 = ((sn_flag == 2) & (rmax > 0.4)) & (fpeak > 0.5)"""
+
+#######################################
+### Reading the redshifts #############
+#######################################
+"""
+hdutable = fits.open('/Users/yasi/Research/Emission_line/sample_char_refined.fits')
+tbdata = hdutable[1].data
+cols = hdutable[1].columns
+               
+z = tbdata.field('ZSYS')   
+shen_RMID = tbdata.field('RMID')"""
+
+
+#############################################
+###### Selecting contaminated objects #######
+#############################################
+emission_name = ['Ha', 'Hb', 'HeII', 'MgII', 'CIV', 'CIII']
+BLR_data = ascii.read('BLR_emission_all.dat', guess = True)
+RMID = np.asarray(BLR_data['RMID'])
+Filter = np.asarray(BLR_data['Filter'])
+emission = np.asarray(BLR_data['emission'])
+ratio = np.asarray(BLR_data['Ratio'])
+ratio = ratio * 100.0
+
+
+#Hugh's Patch#################################
+file = 'sample_char_final.fits'
+hdu = fits.open(file)
+data1 = hdu[1].data
+header1 = hdu[1].header
+
+Rmid_samplechar = data1["RMID"]
+zsys = data1["ZSYS"] #850
+
+
+#make dictionary pairing the RMID and z
+z_dict = {}
+for i in range(0,len(zsys)):
+    z_dict[str(int(Rmid_samplechar[i]))] = zsys[i]
+
+#Reads input list of booleans, selects the RMIDs, and then returns an array of z's for those RMIDs
+def zgetter(booleans):
+    line_RMID = RMID[booleans] #2400 lowered by boolean
+    
+    z = [] #to be the array of redshifts
+    for i in line_RMID:
+        z.append(z_dict[str(i)])
+    
+    return z
+##############################################
+
+
+g_Ha = (Filter == 'g') & (emission == 'Ha') #2400
+g_Hb = (Filter == 'g') & (emission == 'Hb')
+g_HeII = (Filter == 'g') & (emission == 'HeII')
+g_MgII = (Filter == 'g') & (emission == 'MgII')
+g_CIV = (Filter == 'g') & (emission == 'CIV')
+g_CIII = (Filter == 'g') & (emission == 'CIII')
+
+g_Ha_sample = RMID[g_Ha] #2400
+g_Ha_ratio = ratio[g_Ha] #2400
+g_Ha_zshift = zgetter(g_Ha)
+
+
+g_Hb_sample = RMID[g_Hb]
+g_Hb_ratio = ratio[g_Hb]
+g_Hb_zshift = zgetter(g_Hb)
+
+g_HeII_sample = RMID[g_HeII]
+g_HeII_ratio = ratio[g_HeII]
+g_HeII_zshift = zgetter(g_HeII)
+
+g_MgII_sample = RMID[g_MgII]
+g_MgII_ratio = ratio[g_MgII]
+g_MgII_zshift = zgetter(g_MgII)
+
+g_CIV_sample = RMID[g_CIV]
+g_CIV_ratio = ratio[g_CIV] 
+g_CIV_zshift = zgetter(g_CIV)
+
+g_CIII_sample = RMID[g_CIII]
+g_CIII_ratio = ratio[g_CIII]
+g_CIII_zshift = zgetter(g_CIII)
+
+#----------------------------------------
+
+i_Ha = (Filter == 'i') & (emission == 'Ha')
+i_Hb = (Filter == 'i') & (emission == 'Hb')
+i_HeII = (Filter == 'i') & (emission == 'HeII')
+i_MgII = (Filter == 'i') & (emission == 'MgII')
+i_CIV = (Filter == 'i') & (emission == 'CIV')
+i_CIII = (Filter == 'i') & (emission == 'CIII')
+
+i_Ha_sample = RMID[i_Ha]
+i_Ha_ratio = ratio[i_Ha]
+i_Ha_zshift = zgetter(i_Ha)
+
+i_Hb_sample = RMID[i_Hb]
+i_Hb_ratio = ratio[i_Hb]
+i_Hb_zshift = zgetter(i_Hb)
+
+i_HeII_sample = RMID[i_HeII]
+i_HeII_ratio = ratio[i_HeII]
+i_HeII_zshift = zgetter(i_HeII)
+
+i_MgII_sample = RMID[i_MgII]
+i_MgII_ratio = ratio[i_MgII]
+i_MgII_zshift = zgetter(i_MgII)
+
+i_CIV_sample = RMID[i_CIV]
+i_CIV_ratio = ratio[i_CIV] 
+i_CIV_zshift = zgetter(i_CIV)
+
+i_CIII_sample = RMID[i_CIII]
+i_CIII_ratio = ratio[i_CIII]
+i_CIII_zshift = zgetter(i_CIII)
+
+
+    
+
+normal_font = 30    
+fig, ax = plt.subplots(1, figsize = (12,10))
+ax.scatter(i_Ha_zshift, i_Ha_ratio, color = 'red')
+ax.scatter(i_Hb_zshift, i_Hb_ratio, color = 'orangered')
+ax.scatter(i_MgII_zshift, i_MgII_ratio, color = 'tomato')
+ax.scatter(i_HeII_zshift, i_HeII_ratio, color = 'coral')
+ax.scatter(i_CIV_zshift, i_CIV_ratio, color = 'yellow')
+ax.scatter(i_CIII_zshift, i_CIII_ratio, color = 'lightsalmon')
+
+ax.scatter(g_Ha_zshift, g_Ha_ratio, color = 'gray')
+ax.scatter(g_Hb_zshift, g_Hb_ratio, color = 'mediumblue')
+ax.scatter(g_MgII_zshift, g_MgII_ratio, color = 'forestgreen')
+ax.scatter(g_HeII_zshift, g_HeII_ratio, color = 'crimson')
+ax.scatter(g_CIV_zshift,g_CIV_ratio, color = 'k')
+ax.scatter(g_CIII_zshift, g_CIII_ratio, color = 'orange')
+ax.set_xlabel('z')
+ax.set_ylabel('$\%$ Contamination')
+plt.show()
+      
+    
+
+fig, ax = plt.subplots(1, figsize = (12,10))
+ax.bar(i_Ha_zshift, i_Ha_ratio, color = 'lightsalmon', align='center',width = 0.05, alpha = 0.15, label = 'H$\\alpha$')
+ax.annotate('H$\\alpha$', xy = (np.median(i_Ha_zshift) , np.median(i_Ha_ratio)),xytext = (np.median(i_Ha_zshift) , np.median(i_Ha_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(i_Hb_zshift, i_Hb_ratio, color = 'red', align='center',width = 0.05, alpha = 0.15, label = 'H$\\beta$')
+ax.annotate('H$\\beta$', xy = (np.median(i_Hb_zshift) , np.median(i_Hb_ratio)),xytext = (np.median(i_Hb_zshift) , np.median(i_Hb_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(i_HeII_zshift, i_HeII_ratio, color = 'darkorange', align='center',width = 0.05, alpha = 0.15, label = 'HeII')
+ax.annotate('HeII', xy = (np.median(i_HeII_zshift) , np.median(i_HeII_ratio)),xytext = (np.median(i_HeII_zshift) , np.median(i_HeII_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(i_MgII_zshift, i_MgII_ratio, color = 'crimson', align='center',width = 0.05, alpha = 0.15, label = 'MgII')
+ax.annotate('MgII', xy = (np.median(i_MgII_zshift) , np.median(i_MgII_ratio)),xytext = (np.median(i_MgII_zshift) , np.median(i_MgII_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(i_CIV_zshift, i_CIV_ratio, align='center', color = 'firebrick', width = 0.05, alpha = 0.15, label = 'CIV')
+ax.annotate('CIV', xy = (np.median(i_CIV_zshift) , np.median(i_CIV_ratio)),xytext = (np.median(i_CIV_zshift) , np.median(i_CIV_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(i_CIII_zshift, i_CIII_ratio, align='center', color = 'tomato',width = 0.05, alpha = 0.15, label = 'CIII')
+ax.annotate('CIII', xy = (np.median(i_CIII_zshift) , np.median(i_CIII_ratio)),xytext = (np.median(i_CIII_zshift) , np.median(i_CIII_ratio)), fontsize = (normal_font) , color = 'k')
+ax.set_xlabel('z', fontsize = 35)
+ax.set_ylabel('$\%$ Contamination')
+plt.minorticks_on()
+#plt.legend(loc = 'upper left', prop={'size': 20}, borderaxespad = 0.0, numpoints = 1, frameon = True)
+#plt.savefig('Plots/contamination_i.png', dpi = 500)
+plt.show()
+
+fig, ax = plt.subplots(1, figsize = (12,10))
+#ax.bar(g_Ha_zshift, g_Ha_ratio, color = 'b', align='center',width = 0.05, alpha = 0.15, label = 'H$\alpha$')
+ax.bar(g_Hb_zshift, g_Hb_ratio, color = 'dodgerblue', align='center',width = 0.05, alpha = 0.15, label = 'H$\\beta$')
+ax.annotate('H$\\beta$', xy = (np.median(g_Hb_zshift) , np.median(g_Hb_ratio)),xytext = (np.median(g_Hb_zshift) , np.median(g_Hb_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(g_HeII_zshift, g_HeII_ratio, color = 'darkblue', align='center',width = 0.05, alpha = 0.15, label = 'HeII')
+ax.annotate('HeII', xy = (np.median(g_HeII_zshift) , np.median(g_HeII_ratio)),xytext = (np.median(g_HeII_zshift) , np.median(g_HeII_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(g_MgII_zshift, g_MgII_ratio, color = 'slateblue', align='center',width = 0.05, alpha = 0.15, label = 'MgII')
+ax.annotate('MgII', xy = (np.median(g_MgII_zshift) , np.median(g_MgII_ratio)),xytext = (np.median(g_MgII_zshift) , np.median(g_MgII_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(g_CIV_zshift, g_CIV_ratio, align='center', color = 'lightskyblue', width = 0.05, alpha = 0.15, label = 'CIV')
+ax.annotate('CIV', xy = (np.median(g_CIV_zshift) , np.median(g_CIV_ratio)),xytext = (np.median(g_CIV_zshift) , np.median(g_CIV_ratio)), fontsize = (normal_font) , color = 'k')
+ax.bar(g_CIII_zshift, g_CIII_ratio, align='center', color = 'royalblue',width = 0.05, alpha = 0.15, label = 'CIII')
+ax.annotate('CIII', xy = (np.median(g_CIII_zshift) , np.median(g_CIII_ratio)),xytext = (np.median(g_CIII_zshift) , np.median(g_CIII_ratio)), fontsize = (normal_font) , color = 'k')
+#ax.legend(loc ='upper left',prop={'size': 20}, borderaxespad = 0.0, numpoints = 1, frameon = True)
+ax.set_xlabel('z', fontsize = 35 )
+ax.set_ylabel('$\%$ Contamination')
+plt.minorticks_on()
+#plt.savefig('Plots/contamination_g.png', dpi = 500)
+plt.show()
+
+fig, ax = plt.subplots(1, figsize = (12,10))
+ax.bar(i_Ha_zshift, i_Ha_ratio, color = 'crimson', align='center',width = 0.1, alpha = 0.15, label = 'i')
+ax.bar(i_Hb_zshift, i_Hb_ratio, color = 'crimson', align='center',width = 0.1, alpha = 0.15)
+ax.bar(i_MgII_zshift, i_MgII_ratio, color = 'crimson', align='center',width = 0.1, alpha = 0.15)
+ax.bar(i_HeII_zshift, i_HeII_ratio, color = 'crimson', align='center',width = 0.1, alpha = 0.15)
+ax.bar(i_CIV_zshift, i_CIV_ratio, align='center', color = 'crimson', width = 0.1, alpha = 0.15)
+ax.bar(i_CIII_zshift, i_CIII_ratio, align='center', color = 'crimson',width = 0.1, alpha = 0.15)
+ax.bar(g_Hb_zshift, g_Hb_ratio, color = 'royalblue', align='center',width = 0.1, alpha = 0.15, label = 'g')
+ax.bar(g_MgII_zshift, g_MgII_ratio, color = 'royalblue', align='center',width = 0.1, alpha = 0.15)
+ax.bar(g_HeII_zshift, g_HeII_ratio, color = 'royalblue', align='center',width = 0.1, alpha = 0.15)
+ax.bar(g_CIV_zshift, g_CIV_ratio, align='center', color = 'royalblue', width = 0.1, alpha = 0.15)
+ax.bar(g_CIII_zshift, g_CIII_ratio, align='center', color = 'royalblue',width = 0.1, alpha = 0.15)
+ax.legend(loc ='upper left',prop={'size': 30}, borderaxespad = 0.1, numpoints = 1, frameon = True)
+ax.set_xlabel('z')
+ax.set_ylabel('$\%$ Contamination')
+#plt.savefig('Plots/contamination_gi.png')
+plt.show()
+
+#-------------------
+# Double panel plot:
+#-------------------
+fig = plt.figure(figsize = (12, 12)) 
+ax = plt.subplot2grid((2,2),(0,0))
+ax1 = plt.subplot2grid((2,1),(0,0), colspan = 12)
+ax1.bar(i_Ha_zshift, i_Ha_ratio, color = 'lightsalmon', align='center',width = 0.05, alpha = 0.2, label = 'H$\\alpha$')
+ax1.annotate('H$\\alpha$', xy = (np.mean(i_Ha_zshift) , np.mean(i_Ha_ratio)),xytext = (np.mean(i_Ha_zshift) , np.mean(i_Ha_ratio)), fontsize = (normal_font) , color = 'k')
+ax1.bar(i_Hb_zshift, i_Hb_ratio, color = 'red', align='center',width = 0.05, alpha = 0.2, label = 'H$\\beta$')
+ax1.annotate('H$\\beta$', xy = (np.mean(i_Hb_zshift) , np.mean(i_Hb_ratio)),xytext = (np.mean(i_Hb_zshift) , np.mean(i_Hb_ratio)), fontsize = (normal_font) , color = 'k')
+ax1.bar(i_HeII_zshift, i_HeII_ratio, color = 'darkorange', align='center',width = 0.05, alpha = 0.2, label = 'HeII')
+ax1.annotate('HeII', xy = (np.mean(i_HeII_zshift) , np.mean(i_HeII_ratio)),xytext = (np.mean(i_HeII_zshift) , np.mean(i_HeII_ratio)), fontsize = (normal_font) , color = 'k')
+ax1.bar(i_MgII_zshift, i_MgII_ratio, color = 'crimson', align='center',width = 0.05, alpha = 0.2, label = 'MgII')
+ax1.annotate('MgII', xy = (np.mean(i_MgII_zshift) , np.mean(i_MgII_ratio)),xytext = (np.mean(i_MgII_zshift) , np.mean(i_MgII_ratio)), fontsize = (normal_font) , color = 'k')
+ax1.bar(i_CIV_zshift, i_CIV_ratio, align='center', color = 'brown', width = 0.05, alpha = 0.2, label = 'CIV')
+ax1.annotate('CIV', xy = (np.mean(i_CIV_zshift) , np.mean(i_CIV_ratio)),xytext = (np.mean(i_CIV_zshift) , np.mean(i_CIV_ratio)), fontsize = (normal_font) , color = 'k')
+ax1.bar(i_CIII_zshift, i_CIII_ratio, align='center', color = 'tomato',width = 0.05, alpha = 0.2, label = 'CIII')
+ax1.annotate('CIII', xy = (np.mean(i_CIII_zshift) , np.mean(i_CIII_ratio)),xytext = (np.mean(i_CIII_zshift) , np.mean(i_CIII_ratio)), fontsize = (normal_font) , color = 'k')
+ax1.set_title('$\%$ Contamination', fontsize = 35)
+plt.minorticks_on()
+#plt.xticks([])
+fig.subplots_adjust(hspace = 0.0)
+ax1.set_ylabel('i-band', fontsize = 35)
+ax2 = plt.subplot2grid((2,2),(1,0), colspan = 10)
+ax2.bar(g_Hb_zshift, g_Hb_ratio, color = 'dodgerblue', align='center',width = 0.05, alpha = 0.2, label = 'H$\\beta$')
+ax2.annotate('H$\\beta$', xy = (np.median(g_Hb_zshift) , np.median(g_Hb_ratio)),xytext = (np.median(g_Hb_zshift) , np.median(g_Hb_ratio)), fontsize = (normal_font) , color = 'k')
+ax2.bar(g_HeII_zshift, g_HeII_ratio, color = 'darkblue', align='center',width = 0.05, alpha = 0.2, label = 'HeII')
+ax2.annotate('HeII', xy = (np.median(g_HeII_zshift) , np.median(g_HeII_ratio)),xytext = (np.median(g_HeII_zshift) , np.median(g_HeII_ratio)), fontsize = (normal_font) , color = 'k')
+ax2.bar(g_MgII_zshift, g_MgII_ratio, color = 'slateblue', align='center',width = 0.05, alpha = 0.2, label = 'MgII')
+ax2.annotate('MgII', xy = (np.median(g_MgII_zshift) , np.median(g_MgII_ratio)),xytext = (np.median(g_MgII_zshift) , np.median(g_MgII_ratio)), fontsize = (normal_font) , color = 'k')
+ax2.bar(g_CIV_zshift, g_CIV_ratio, align='center', color = 'lightskyblue', width = 0.05, alpha = 0.2, label = 'CIV')
+ax2.annotate('CIV', xy = (np.median(g_CIV_zshift) , np.median(g_CIV_ratio)),xytext = (np.median(g_CIV_zshift) , np.median(g_CIV_ratio)), fontsize = (normal_font) , color = 'k')
+ax2.bar(g_CIII_zshift, g_CIII_ratio, align='center', color = 'royalblue',width = 0.05, alpha = 0.2, label = 'CIII')
+ax2.annotate('CIII', xy = (np.median(g_CIII_zshift) , np.median(g_CIII_ratio)),xytext = (np.median(g_CIII_zshift) , np.median(g_CIII_ratio)), fontsize = (normal_font) , color = 'k')
+ax2.set_xlabel('Redshift', fontsize = 35 )
+plt.minorticks_on()
+ax2.tick_params(axis='x',which='both',top ='on', direction = 'inout')
+#ax2.tick_params(axis='x',which='both',bottom ='on', direction = 'inout')
+ax2.set_ylabel('g-band', fontsize = 35)
+#plt.savefig('Plots/contamination_double.png', dpi = 400)
+#plt.savefig('Plots/contamination_double.eps')
+plt.show()
+
+##############################################################
+#Now need to sort out which ones are in our 222 quasar sample#
+##############################################################
+
+hstdat = ascii.read("hst_super_catalogue.dat")
+
+RMID222float = hstdat["ID"]
+disklag = hstdat["gi_lag"]
+disklag_err = [hstdat["gi_lag_loerr"], hstdat["gi_lag_uperr"]]
+
+RMID222 = [int(i) for i in RMID222float]
+
+hdulist = fits.open("summary.fits")
+header = hdulist[1].header
+Hb_javlag = hdulist[1].data['HB_PYROA_LAG']
+Hb_javlag_err = hdulist[1].data['HB_PYROA_LAG_ERR']
+
+#this strech of code only works if the "sample" lists are sorted numerically which they appear to be
+#make index lists which narrow the
+#problem lies in sample lists containing rmid's which don't exist in the 222
+
+
+#Function used to match lags to sample!
+def sample_match(samplelist):
+    #Produce index list for RMID222 (rmid_filter)
+    rmid222_filter = []
+    for i in range(0, len(RMID222)):
+        if Hb_javlag[RMID222[i]] == -1 or np.isnan(Hb_javlag[RMID222[i]]): 
+            continue 
+        if RMID222[i] in samplelist:
+            rmid222_filter.append(i)
+      
+    #RMID's that will be in the plot
+    plot_RMID = [RMID222[i] for i in rmid222_filter]
+    
+    rmidsample_filter = []
+    for i in range(0, len(samplelist)):
+        if samplelist[i] in plot_RMID:
+            rmidsample_filter.append(i)
+      
+    
+    rmid_Hb_filter = []
+    for i in range(0, len(Rmid_samplechar)):
+        if Rmid_samplechar[i] in plot_RMID:
+            rmid_Hb_filter.append(i)
+            
+    #returns filters in indicies
+    #narrow lag list like:
+    #disklag_narrow = [disklag[i] for i in rmid222_filter]
+    return rmid222_filter, rmidsample_filter, rmid_Hb_filter
+
+
+
+#i_Hb_sample
+diskfilt, samplefilt, Hbfilt = sample_match(i_Hb_sample)
+
+#These for looped lists apply filters to match lags and samples#
+disklag_fin = [disklag[i] for i in diskfilt] 
+disklag_fin_err = [[disklag_err[0][i] for i in diskfilt], [disklag_err[1][i] for i in diskfilt]]
+
+i_Hb_ratio_fin = [i_Hb_ratio[i] for i in samplefilt]
+
+Hb_javlag_fin = [Hb_javlag[i] for i in Hbfilt]
+Hb_javlag_fin_err = [Hb_javlag_err[i] for i in Hbfilt]
+################################################################
+
+#Plotting
+
+cmap = matplotlib.cm.get_cmap('viridis')
+norm = matplotlib.colors.Normalize(vmin=min(i_Hb_ratio_fin), vmax=max(i_Hb_ratio_fin)) #if there are extreme outliers in colorbar change vmin/vmax accordingly
+SM = matplotlib.cm.ScalarMappable(cmap=cmap, norm=norm)
+colored = []
+
+
+for i in range(0, len(disklag_fin)):
+    colored.append(SM.to_rgba(i_Hb_ratio_fin[i]))
+    #if there are any outliers on the color map, make an if statement to catch these outliers (based likely on surpassing vmin/vmax) and then append some color like 'red' instead
+    
+
+fig, ax = plt.subplots(1, 1, dpi=200)
+#fig.patch.set_facecolor('#bfbfbf')
+fig.suptitle("i-filter Hb% Lag Relation", fontsize = 20)
+
+
+plot = ax.scatter(Hb_javlag_fin, disklag_fin, marker = "o", s = 5, c = i_Hb_ratio_fin, cmap = plt.cm.viridis, vmin=min(i_Hb_ratio_fin), vmax=max(i_Hb_ratio_fin))
+
+for i in range(0, len(colored)):
+    ax.errorbar(Hb_javlag_fin[i], disklag_fin[i], xerr = [[Hb_javlag_fin_err[i][0]], [Hb_javlag_fin_err[i][1]]], yerr = [[disklag_fin_err[0][i]], [disklag_fin_err[1][i]]], fmt = "o", capsize = 0, markersize = 5, color = colored[i], ecolor = "#3d3d3d", elinewidth=0.5)
+cbar = fig.colorbar(plot)
+cbar.set_label("Contamination %")
+
+ax.tick_params(which = 'major', axis="x", direction="in", length = 6)
+ax.tick_params(which = 'major', axis="y", direction="in", length = 6)
+ax.tick_params(which = 'minor', axis="x", direction="in", length = 1)
+ax.tick_params(which = 'minor', axis="y", direction="in", length = 1)
+ax.xaxis.grid(False, which='minor')
+ax.yaxis.grid(False, which='minor')
+ax.xaxis.set_minor_locator(AutoMinorLocator())
+ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+ax.set_xlabel("Hb lag (days)")
+ax.set_ylabel("g-i lag (days)")
+#ax.set_xscale('log')
+#ax.set_yscale('log')
