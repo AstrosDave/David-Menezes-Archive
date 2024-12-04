@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Dec  4 15:50:09 2024
+
+@author: davidmenezes
+"""
+
+import numpy as np
+import os
+
+os.chdir('/Users/davidmenezes/Desktop/2023-24 Research')
+
+from astropy.io import ascii
+
+
+def calculate_flux(wavelengths, flux_values, start_wavelength, end_wavelength):
+    selected_wavelengths = []
+    selected_fluxes = []
+
+    # Filter wavelengths and flux values within the given range
+    for x in range(len(wavelengths)):
+        if start_wavelength <= wavelengths[x] < end_wavelength:
+            selected_wavelengths.append(wavelengths[x])
+            selected_fluxes.append(flux_values[x])
+
+    left_rule = []
+    trap_rule = []
+
+    print("Integrating spectrum from {start_wavelength} to {end_wavelength} angstroms")
+
+    for x in range(len(selected_wavelengths) - 1):
+        delta_wavelength = selected_wavelengths[x + 1] - selected_wavelengths[idx]
+
+        # Apply left-hand rule, right-hand rule, and trapezoidal rule
+        left_rule.append(selected_fluxes[x] * delta_wavelength)
+        trap_rule.append(0.5 * (selected_fluxes[x] + selected_fluxes[x + 1]) * delta_wavelength)
+
+    left_sum = np.sum(np.array(left_rule)) / (end_wavelength - start_wavelength)
+    right_sum = np.sum(np.array(left_rule)) / (end_wavelength - start_wavelength)
+    trap_sum = np.sum(np.array(trap_rule)) / (end_wavelength - start_wavelength)
+
+    print("Left-side rule = {left_sum}")
+    print("Right-side rule = {right_sum}")
+    print("Trapezoid rule = {trap_sum}")
+
+# Example w/RM337
+rmid = "337"
+redshift = 0.70865
+
+data_file = 'sdssrm_spec/sdssrm_spec/avg/rm' + rmid + '_avg_w.dat'
+spectra_data = ascii.read(data_file)
+
+# Load the wavelengths and flux values
+wavelength_rest_frame = spectra_data['col0']
+flux_rest_frame = spectra_data['col1']
+
+# Example w/RM694
+calculate_flux(wavelength_rest_frame, flux_rest_frame, 2000, 2800)
+
+rmid = "694"
+redshift = 0.53238
+
+data_file = 'sdssrm_spec/sdssrm_spec/avg/rm' + rmid + '_avg_w.dat'
+spectra_data = ascii.read(data_file)
+
+wavelength_rest_frame = spectra_data['col0']
+flux_rest_frame = spectra_data['col1']
+
+calculate_flux(wavelength_rest_frame, flux_rest_frame, 2600, 3100)
