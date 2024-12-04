@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Nov 8 12:01:07 2024
+
+@author: davidmenezes
+"""
+
+# =============================================================================
+# ADDITIONAL NOTES + COMMENTS
+# Hey David. I just wanted to check in, I think when using np.random.normal() 
+# the scale you’ll want to use it the np.std(flux - modelflux)
+# =============================================================================
+
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+# =============================================================================
+# import glob
+# import matplotlib as mpl
+# import scipy
+# =============================================================================
+
+from astropy.io import fits
+from scipy.integrate import simps
+# =============================================================================
+# from astropy.convolution import convolve
+# from astropy.convolution import Gaussian1DKernel
+# from astropy.convolution import Box1DKernel
+# from astropy.io import fits
+# from scipy.optimize import curve_fit as curve_fit
+# from matplotlib import rcParams
+# from scipy.signal import argrelmin
+# from astropy.io import ascii
+# from matplotlib.gridspec import GridSpec
+# =============================================================================
+
+directory = os.listdir('/Users/davidmenezes/Desktop/2023-24 Research/rm101/plate/')
+# =============================================================================
+# directory = os.listdir('/Users/davidmenezes/Desktop/2023-24 Research/rm101/DR18/')
+# directory = os.listdir('/Users/davidmenezes/Desktop/2023-24 Research/rm101/fps/')
+# =============================================================================
+
+
+#Switch key names + Switch wavelength to restframe 
+def read_spectrum(file):
+    with fits.open(file) as hdul:
+        data = hdul[1].data
+        wavelength = data['Wavelength']
+        flux = data['Flux']
+        mjd = data['MJD']
+        uncert = [whatever]
+    return wavelength, flux, mjd
+
+#filter around H-beta (width = 1370 angstroms)
+def hbeta_filter(wavelength):
+    center = 4861
+    width = 1370
+    filter_mask = (wavelength >= (center - width / 2)) & (wavelength <= (center + width / 2))
+    return filter_mask
+
+
+
+#Monte Carlo simulation for uncertainty
+def monte_carlo_photometry(wavelength, flux, filter_mask, n_iterations=500, uncertainty=uncert):
+    fluxes = []
+    for _ in range(n_iterations):
+        perturbed_flux = np.random.normal(flux, uncertainty)
+        flux_in_filter = perturbed_flux[filter_mask]
+        fluxes.append(simps(flux_in_filter, wavelength[filter_mask]))
+    return fluxes
+
+
+
+#perturbed spectra plot
+def plot_perturbed_spectra(wavelength, flux, perturbed_flux):
+    plt.figure(figsize=(10, 6))
+    plt.plot(wavelength, flux, label='Original Spectrum', color='blue')
+    plt.plot(wavelength, perturbed_flux, label='Perturbed Spectrum', color='red', alpha=0.7)
+    plt.xlabel('Wavelength (Angstroms)')
+    plt.ylabel('Flux')
+    plt.legend()
+    plt.show()
+
+
+
+#main processing loop for multiple epochs
+def process_spectrum_for_epochs(files, n_iterations=500, uncertainty=0.05):
+    results = []
+    for file in files:
+        wavelength, flux, mjd = read_spectrum(file)
+        filter_mask = hbeta_filter(wavelength)
+        fluxes = monte_carlo_photometry(wavelength, flux, filter_mask, n_iterations, uncertainty)
+        
+        #mean and standard deviation calculation for the fluxes
+        mean_flux = np.mean(fluxes)
+        std_flux = np.std(fluxes)
+        results.append((mjd[0], mean_flux, std_flux))  # Assuming single MJD per file
+        
+    np.savetxt("lightcurve_data.txt", results, header="MJD MeanFlux StdFlux", fmt="%f %f %f")
+    return results
+
+
+
+def plot_flux_histogram(fluxes):
+    plt.figure(figsize=(8, 6))
+    plt.hist(fluxes, bins=30, color='grey', alpha=0.7)
+    plt.xlabel('Flux')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Flux Measurements')
+    plt.show()
+
+
+
+for ep in directory:
+    file = '/Users/davidmenezes/Desktop/2023-24 Research/rm101/plate/'  + str(ep)
+# =============================================================================
+#     file = '/Users/davidmenezes/Desktop/2023-24 Research/rm101/DR18/'  + str(ep)
+#     file = '/Users/davidmenezes/Desktop/2023-24 Research/rm101/fps/'  + str(ep)
+# =============================================================================
+    obswav = []
+    flux = []
+      
+    data = fits.open(file)
+      
+    for i in data:
+        obswav.append(i[0])
+        flux.append(i[1])
+      
+    obswav = np.asarray(obswav)
+    flux = np.asarray(flux)
+    
+          
+          
+   #hdu = fits.open(file)       
+    
+
