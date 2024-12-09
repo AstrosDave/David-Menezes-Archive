@@ -42,14 +42,23 @@ directory = os.listdir('/Users/davidmenezes/Desktop/2023-24 Research/rm101/plate
 # =============================================================================
 
 
-#Switch key names + Switch wavelength to restframe 
+#Switch key names + Switch wavelength to restframe (IF ON MACBOOK CHANGE TO DESKTOP NOT DOWNLOADS)
 def read_spectrum(file):
-    with fits.open(file) as hdul:
-        data = hdul[1].data
-        wavelength = data['Wavelength']
-        flux = data['Flux']
-        mjd = data['MJD']
-        uncert = [whatever]
+    with fits.open(file) as hdu:
+        file = "spec-16169-59636-27021597909965538.fits"
+        hdu = fits.open(file)
+        data1 = hdu[1].data
+        header1 = hdu[1].header
+        data2 = hdu[2].data
+        header2 = hdu[2].header
+        IVAR = data1["IVAR"]
+        flux = data1["FLUX"]
+        mjd = data2['MJD']
+        wavelength = 10**(data1["LOGLAM"])
+        uncertainty = 1/np.sqrt(IVAR)
+        z = data2["z"][0]
+        restwavelength = wavelength/(1+z)
+        
     return wavelength, flux, mjd
 
 #filter around H-beta (width = 1370 angstroms)
@@ -62,7 +71,7 @@ def hbeta_filter(wavelength):
 
 
 #Monte Carlo simulation for uncertainty
-def monte_carlo_photometry(wavelength, flux, filter_mask, n_iterations=500, uncertainty=uncert):
+def monte_carlo_photometry(wavelength, flux, filter_mask, n_iterations=500, uncertainty=uncertainty):
     fluxes = []
     for _ in range(n_iterations):
         perturbed_flux = np.random.normal(flux, uncertainty)
@@ -129,9 +138,3 @@ for ep in directory:
       
     obswav = np.asarray(obswav)
     flux = np.asarray(flux)
-    
-          
-          
-   #hdu = fits.open(file)       
-    
-
