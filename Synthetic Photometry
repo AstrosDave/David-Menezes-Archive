@@ -15,15 +15,15 @@ Created on Fri Nov 8 12:01:07 2024
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+
+from astropy.io import fits
+import scipy
+from scipy import integrate
+
 # =============================================================================
 # import glob
 # import matplotlib as mpl
 # import scipy
-# =============================================================================
-
-from astropy.io import fits
-from scipy.integrate import simps
-# =============================================================================
 # from astropy.convolution import convolve
 # from astropy.convolution import Gaussian1DKernel
 # from astropy.convolution import Box1DKernel
@@ -35,31 +35,40 @@ from scipy.integrate import simps
 # from matplotlib.gridspec import GridSpec
 # =============================================================================
 
-directory = os.listdir('/Users/davidmenezes/Desktop/2023-24 Research/rm101/plate/')
-# =============================================================================
-# directory = os.listdir('/Users/davidmenezes/Desktop/2023-24 Research/rm101/DR18/')
-# directory = os.listdir('/Users/davidmenezes/Desktop/2023-24 Research/rm101/fps/')
-# =============================================================================
+directory = os.listdir('/Users/davidmenezes/Downloads/2023-24 Research/rm101/Main/')
+direc = '/Users/davidmenezes/Downloads/2023-24 Research/rm101/Main/'
 
 
 #Switch key names + Switch wavelength to restframe (IF ON MACBOOK CHANGE TO DESKTOP NOT DOWNLOADS)
 def read_spectrum(file):
     with fits.open(file) as hdu:
-        file = "spec-16169-59636-27021597909965538.fits"
         hdu = fits.open(file)
         data1 = hdu[1].data
-        header1 = hdu[1].header
         data2 = hdu[2].data
+        header1 = hdu[1].header
         header2 = hdu[2].header
+        
         IVAR = data1["IVAR"]
         flux = data1["FLUX"]
         mjd = data2['MJD']
-        wavelength = 10**(data1["LOGLAM"])
-        uncertainty = 1/np.sqrt(IVAR)
+        wav = 10**(data1["LOGLAM"])
         z = data2["z"][0]
-        restwavelength = wavelength/(1+z)
+        restwavelength = wav/(1+z)
         
-    return wavelength, flux, mjd
+        with np.errstate(divide='ignore', invalid='ignore'):
+            uncertainty = np.where(IVAR > 0, 1 / np.sqrt(IVAR), np.inf)
+        
+        # Filtering: Mask for valid entries
+        mask = (IVAR > 0) & np.isfinite(flux) & np.isfinite(uncertainty)
+
+        # Apply mask to variables
+        wav = wav[mask]
+        flux = flux[mask]
+        uncertainty = uncertainty[mask]
+        restwavelength = restwavelength[mask]
+        
+        
+    return wav, flux, uncertainty, restwavelength, mjd, z
 
 #filter around H-beta (width = 1370 angstroms)
 def hbeta_filter(wavelength):
@@ -71,12 +80,12 @@ def hbeta_filter(wavelength):
 
 
 #Monte Carlo simulation for uncertainty
-def monte_carlo_photometry(wavelength, flux, filter_mask, n_iterations=500, uncertainty=uncertainty):
+def monte_carlo_photometry(wavelength, flux, filter_mask, uncertainty, n_iterations=500):
     fluxes = []
     for _ in range(n_iterations):
         perturbed_flux = np.random.normal(flux, uncertainty)
         flux_in_filter = perturbed_flux[filter_mask]
-        fluxes.append(simps(flux_in_filter, wavelength[filter_mask]))
+        fluxes.append(integrate.simpson(flux_in_filter, x = wavelength[filter_mask]))
     return fluxes
 
 
@@ -92,49 +101,20 @@ def plot_perturbed_spectra(wavelength, flux, perturbed_flux):
     plt.show()
 
 
-
-#main processing loop for multiple epochs
-def process_spectrum_for_epochs(files, n_iterations=500, uncertainty=0.05):
-    results = []
-    for file in files:
-        wavelength, flux, mjd = read_spectrum(file)
-        filter_mask = hbeta_filter(wavelength)
-        fluxes = monte_carlo_photometry(wavelength, flux, filter_mask, n_iterations, uncertainty)
-        
-        #mean and standard deviation calculation for the fluxes
-        mean_flux = np.mean(fluxes)
-        std_flux = np.std(fluxes)
-        results.append((mjd[0], mean_flux, std_flux))  # Assuming single MJD per file
-        
-    np.savetxt("lightcurve_data.txt", results, header="MJD MeanFlux StdFlux", fmt="%f %f %f")
-    return results
-
-
-
 def plot_flux_histogram(fluxes):
     plt.figure(figsize=(8, 6))
     plt.hist(fluxes, bins=30, color='grey', alpha=0.7)
-    plt.xlabel('Flux')
+    plt.xlabel('Flux') #units
     plt.ylabel('Frequency')
     plt.title('Histogram of Flux Measurements')
     plt.show()
 
 
 
-for ep in directory:
-    file = '/Users/davidmenezes/Desktop/2023-24 Research/rm101/plate/'  + str(ep)
-# =============================================================================
-#     file = '/Users/davidmenezes/Desktop/2023-24 Research/rm101/DR18/'  + str(ep)
-#     file = '/Users/davidmenezes/Desktop/2023-24 Research/rm101/fps/'  + str(ep)
-# =============================================================================
-    obswav = []
-    flux = []
-      
-    data = fits.open(file)
-      
-    for i in data:
-        obswav.append(i[0])
-        flux.append(i[1])
-      
-    obswav = np.asarray(obswav)
-    flux = np.asarray(flux)
+    
+for ep in direc:
+    read_spectrum(ep)
+    filt = hbeta_filter(wav)
+    fluxes_mc = monte_carlo_photometry(wav, flux, filt, uncertainty)
+    plot_flux_histogram(fluxes_mc)
+
