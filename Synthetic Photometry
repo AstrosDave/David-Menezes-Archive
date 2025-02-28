@@ -42,79 +42,67 @@ direc = '/Users/davidmenezes/Downloads/2023-24 Research/rm101/Main/'
 #Switch key names + Switch wavelength to restframe (IF ON MACBOOK CHANGE TO DESKTOP NOT DOWNLOADS)
 def read_spectrum(file):
     with fits.open(file) as hdu:
-        hdu = fits.open(file)
         data1 = hdu[1].data
         data2 = hdu[2].data
-        header1 = hdu[1].header
-        header2 = hdu[2].header
         
         IVAR = data1["IVAR"]
         flux = data1["FLUX"]
         mjd = data2['MJD']
         wav = 10**(data1["LOGLAM"])
         z = data2["z"][0]
-        restwavelength = wav/(1+z)
-        
+        restwavelength = wav / (1 + z)
+
         with np.errstate(divide='ignore', invalid='ignore'):
             uncertainty = np.where(IVAR > 0, 1 / np.sqrt(IVAR), np.inf)
-        
-        # Filtering: Mask for valid entries
+
+        # Mask for valid entries
         mask = (IVAR > 0) & np.isfinite(flux) & np.isfinite(uncertainty)
+        return wav[mask], flux[mask], uncertainty[mask], restwavelength[mask], mjd, z
 
-        # Apply mask to variables
-        wav = wav[mask]
-        flux = flux[mask]
-        uncertainty = uncertainty[mask]
-        restwavelength = restwavelength[mask]
-        
-        
-    return wav, flux, uncertainty, restwavelength, mjd, z
-
-#filter around H-beta (width = 1370 angstroms)
+# H-beta filter
 def hbeta_filter(wavelength):
-    center = 4861
-    width = 1370
-    filter_mask = (wavelength >= (center - width / 2)) & (wavelength <= (center + width / 2))
-    return filter_mask
+    center, width = 4861, 1370
+    return (wavelength >= (center - width / 2)) & (wavelength <= (center + width / 2))
 
-
-
-#Monte Carlo simulation for uncertainty
-def monte_carlo_photometry(wavelength, flux, filter_mask, uncertainty, n_iterations=500):
-    fluxes = []
+# Monte Carlo simulation for uncertainty
+def monte_carlo_photometry(wavelength, flux, filter_mask, uncertainty, n_iterations=20):
+    perturbed_spectra = []
     for _ in range(n_iterations):
-        perturbed_flux = np.random.normal(flux, uncertainty)
-        flux_in_filter = perturbed_flux[filter_mask]
-        fluxes.append(integrate.simpson(flux_in_filter, x = wavelength[filter_mask]))
-    return fluxes
+        perturbed_flux = np.random.normal(flux, uncertainty)  # Create perturbed spectrum
+        perturbed_spectra.append(perturbed_flux)  # Store each perturbed spectrum
+    return perturbed_spectra
 
-
-
-#perturbed spectra plot
-def plot_perturbed_spectra(wavelength, flux, perturbed_flux):
+# Plot original and perturbed spectra
+def plot_perturbed_spectra(wavelength, original_flux, perturbed_spectra):
     plt.figure(figsize=(10, 6))
-    plt.plot(wavelength, flux, label='Original Spectrum', color='blue')
-    plt.plot(wavelength, perturbed_flux, label='Perturbed Spectrum', color='red', alpha=0.7)
+    plt.plot(wavelength, original_flux, label='Original Spectrum', color='blue', linewidth=2)
+
+    for spectrum in perturbed_spectra:
+        plt.plot(wavelength, spectrum, color='red', alpha=0.2)
+
     plt.xlabel('Wavelength (Angstroms)')
     plt.ylabel('Flux')
     plt.legend()
+    plt.title('Original and Perturbed Spectra')
     plt.show()
 
-
+# Histogram of flux values
 def plot_flux_histogram(fluxes):
     plt.figure(figsize=(8, 6))
     plt.hist(fluxes, bins=30, color='grey', alpha=0.7)
-    plt.xlabel('Flux') #units
+    plt.xlabel('Flux')
     plt.ylabel('Frequency')
     plt.title('Histogram of Flux Measurements')
     plt.show()
 
+# Directory containing spectra
+direc = '/Users/davidmenezes/Downloads/2023-24 Research/rm101/Main/'
+files = [os.path.join(direc, f) for f in os.listdir(direc) if f.endswith('.fits')]
 
-
-    
-for ep in direc:
-    read_spectrum(ep)
+# Process each spectrum
+for file in files:
+    wav, flux, uncertainty, _, _, _ = read_spectrum(file)
     filt = hbeta_filter(wav)
-    fluxes_mc = monte_carlo_photometry(wav, flux, filt, uncertainty)
-    plot_flux_histogram(fluxes_mc)
-
+    
+    perturbed_spectra = monte_carlo_photometry(wav, flux, filt, uncertainty, n_iterations=20)
+    plot_perturbed_spectra(wav, flux, perturbed_spectra)  # Plot perturbed spectra
