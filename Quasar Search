@@ -1,0 +1,105 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Feb 29 15:48:00 2024
+
+@author: davidmenezes
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from astropy.convolution import convolve
+from astropy.convolution import Gaussian1DKernel
+from astropy.convolution import Box1DKernel
+from astropy.io import fits
+from scipy.optimize import curve_fit as curve_fit
+from matplotlib import rcParams
+from scipy.signal import argrelmin
+import glob
+import scipy
+from astropy.io import ascii
+
+from matplotlib.gridspec import GridSpec
+from matplotlib.ticker import AutoMinorLocator
+import matplotlib
+from uncertainties import ufloat
+from matplotlib import cm
+from matplotlib import colors
+from scipy import interpolate
+import sys
+
+ID_List = [338, 337, 268, 316, 634, 229, 191, 369, 177, 378, 270, 746, 798, 519, 805, 694, 645, 300, 371, 457, 243, 510, 789, 267, 733, 622, 638, 551, 541, 497, 601, 720, 399, 101, 103, 375, 736, 701, 291, 305, 767, 118, 329, 341, 301, 324]
+# No Data for: 33, 50, 40, 78, 88, 17
+# ID = input("Type in an RMID: ")
+
+for RMID in ID_List:
+    avgfile = "sdssrm_spec/sdssrm_spec/avg/rm" + str(RMID) + "_avg_w.dat"
+    
+    rmsfile = "sdssrm_spec/sdssrm_spec/rms/rm" + str(RMID) + "_rms_w.dat"
+    
+    # Reads in average flux
+    data = np.loadtxt(avgfile, skiprows=8)
+    
+    obswav = []
+    flux = []
+    
+    for i in data:
+        obswav.append(i[0])
+        flux.append(i[1])
+    
+    obswav = np.asarray(obswav)
+    flux = np.asarray(flux)
+        
+    datarms = np.loadtxt(rmsfile, skiprows=8)
+    
+    rmsflux = []
+    rmsobswav = []
+    
+    for i in datarms:
+        rmsobswav.append(i[0])
+        rmsflux.append(i[1])
+    
+    
+    #find redshift################################################################
+    
+    file = '/Users/davidmenezes/Desktop/2023-24 Research/sample_char_final.fits'
+    hdu = fits.open(file)
+    data1 = hdu[1].data
+    header1 = hdu[1].header
+    
+    Rmid_samplechar = data1["RMID"]
+    zsys = data1["ZSYS"]  # 850
+    
+    zthisquasar = zsys[int(RMID)]
+    
+    ##############################################################################
+    
+    restwav = obswav
+    restwavrms = rmsobswav
+    
+    plt.figure(figsize=(10, 8))
+    
+    plt.subplot(2, 1, 1)
+    plt.plot(restwav, flux)
+    plt.axvspan(4000/(1 + zthisquasar), 5470/(1 + zthisquasar), alpha = 0.3, color = "green", label = 'g Filter')
+    plt.axvspan(6833/(1 + zthisquasar), 8233/(1 + zthisquasar), alpha = 0.3, color = "red", label = 'i Filter')
+    plt.title("Average Spectrum for RM" + str(RMID))
+    plt.xlabel("Wavelength (Rest Frame) $\AA$")
+    plt.ylabel("Average Flux")
+    # plt.ylim(0, )
+    plt.legend()
+    
+    plt.subplot(2, 1, 2)
+    plt.plot(restwavrms, rmsflux)
+    plt.axvspan(4000/(1 + zthisquasar), 5470/(1 + zthisquasar), alpha = 0.3, color = "green", label = 'g Filter')
+    plt.axvspan(6833/(1 + zthisquasar), 8233/(1 + zthisquasar), alpha = 0.3, color = "red", label = 'i Filter')
+    plt.title("RMS Spectrum for RM" + str(RMID))
+    plt.xlabel("Wavelength (Rest Frame) $\AA$")
+    plt.ylabel("RMS Flux")
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.show()
+    
+# fig,ax=plt.subplot()
+
+
