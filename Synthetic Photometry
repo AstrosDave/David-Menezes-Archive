@@ -46,7 +46,7 @@ def read_spectrum(file):
     with fits.open(file) as hdu:
         data1 = hdu[1].data
         data2 = hdu[2].data
-        
+
         IVAR = data1["IVAR"]
         flux = data1["FLUX"]
         mjd = data2['MJD']
@@ -54,12 +54,23 @@ def read_spectrum(file):
         z = data2["z"][0]
         restwavelength = wav / (1 + z)
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            uncertainty = np.where(IVAR > 0, 1 / np.sqrt(IVAR), np.inf)
+        # === NEW: Mask based on IVAR == 0
+        zero_ivar_mask = IVAR == 0
 
-        # Mask for valid entries
-        mask = (IVAR > 0) & np.isfinite(flux) & np.isfinite(uncertainty)
-        return wav[mask], flux[mask], uncertainty[mask], restwavelength[mask], mjd, z
+        # === Flux mask: filter out values below some threshold, e.g., flux > -1e5 (change as needed)
+        flux_mask = np.isfinite(flux) & (flux > -1e5) & (flux < 1e5)  # conservative range
+
+        # === Compute NMAD uncertainty
+        def nmad(arr):
+            return 1.4826 * np.median(np.abs(arr - np.median(arr)))
+        
+        flux_nmad = nmad(flux[flux_mask]) if np.any(flux_mask) else np.nan
+        uncertainty = np.full_like(flux, flux_nmad)
+
+        # Final mask: only include good flux, non-zero IVAR, and finite uncertainty
+        mask = flux_mask & np.isfinite(uncertainty) & (IVAR > 0)
+
+        return wav[mask], flux[mask], uncertainty[mask], restwavelength[mask], mjd, z, zero_ivar_mask
 
 # H-beta filter
 def hbeta_filter(wavelength):
@@ -104,9 +115,12 @@ files = [os.path.join(direc, f) for f in os.listdir(direc) if f.endswith('.fits'
 
 # Process each spectrum
 for file in files:
-    wav, flux, uncertainty, _, _, _ = read_spectrum(file)
+    wav, flux, uncertainty, _, _, _, zero_ivar_mask = read_spectrum(file)
+
+    if np.any(zero_ivar_mask):
+        print(f"{file} contains spectra with IVAR == 0")
+
     filt = hbeta_filter(wav)
-    
     perturbed_spectra = monte_carlo_photometry(wav, flux, filt, uncertainty, n_iterations=20)
-    plot_perturbed_spectra(wav, flux, perturbed_spectra)  # Plot perturbed spectra
+    plot_perturbed_spectra(wav, flux, perturbed_spectra)
     sys.exit()
