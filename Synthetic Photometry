@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -15,6 +16,7 @@ Created on Fri Nov 8 12:01:07 2024
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import sys
 
 from astropy.io import fits
 import scipy
@@ -65,7 +67,7 @@ def hbeta_filter(wavelength):
     return (wavelength >= (center - width / 2)) & (wavelength <= (center + width / 2))
 
 # Monte Carlo simulation for uncertainty
-def monte_carlo_photometry(wavelength, flux, filter_mask, uncertainty, n_iterations=20):
+def monte_carlo_photometry(wavelength, flux, filter_mask, uncertainty, n_iterations=10):
     perturbed_spectra = []
     for _ in range(n_iterations):
         perturbed_flux = np.random.normal(flux, uncertainty)  # Create perturbed spectrum
@@ -75,7 +77,8 @@ def monte_carlo_photometry(wavelength, flux, filter_mask, uncertainty, n_iterati
 # Plot original and perturbed spectra
 def plot_perturbed_spectra(wavelength, original_flux, perturbed_spectra):
     plt.figure(figsize=(10, 6))
-    plt.plot(wavelength, original_flux, label='Original Spectrum', color='blue', linewidth=2)
+    plt.ylim(-15, 60)
+    plt.plot(wavelength, original_flux, label='Original Spectrum', color='blue', linewidth=2, alpha = 0.1)
 
     for spectrum in perturbed_spectra:
         plt.plot(wavelength, spectrum, color='red', alpha=0.2)
@@ -106,3 +109,4 @@ for file in files:
     
     perturbed_spectra = monte_carlo_photometry(wav, flux, filt, uncertainty, n_iterations=20)
     plot_perturbed_spectra(wav, flux, perturbed_spectra)  # Plot perturbed spectra
+    sys.exit()
