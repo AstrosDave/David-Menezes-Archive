@@ -34,8 +34,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 
 # -------------------- CONFIG --------------------
-CLIENT_ID     = 'yHTFNlKjEMAjFcnEbGNIXRN13Bq6ezt6YJVM1YLeQyY'
-CLIENT_SECRET = 'bsKFfy4jbFkq9avooml9uFq2tlL97VfMGFhaaFej9l8'
+CLIENT_ID     = 'insert client id here'
+CLIENT_SECRET = 'insert client secret here'
 # IMPORTANT: This must EXACTLY match one of the Redirect URIs registered for your app
 REFRESH_TOKEN = None   # e.g. '5dR...'; set to None to force interactive (or let saved token be used)
 # in the Procore Developer Portal (My Apps -> Edit App -> Redirect URIs).
@@ -542,3 +542,4 @@ def launch_ui():
 # Replace your main() with:
 if __name__ == "__main__":
     launch_ui()
+
